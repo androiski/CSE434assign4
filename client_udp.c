@@ -22,9 +22,10 @@ struct header {
 const int h_size = sizeof(struct header);
 
 // These are the constants indicating the states.
-#define STATE_OFFLINE          0
-#define STATE_LOGIN_SENT       1
-#define STATE_ONLINE           2
+#define STATE_OFFLINE           0
+#define STATE_LOGIN_SENT        1
+#define STATE_ONLINE            2
+#define STATE_LOGOUT_SENT       3
 // Now you can define other states in a similar fashion.
 
 // These are the constants indicating the events.
@@ -32,9 +33,10 @@ const int h_size = sizeof(struct header);
 #define EVENT_USER_LOGIN                0
 #define EVENT_USER_POST                 1
 #define EVENT_USER_LOGOUT               2
-#define EVENT_USER_RETRIEVE              3
+#define EVENT_USER_RETRIEVE             3
 #define EVENT_USER_SUB                  4
 #define EVENT_USER_UNSUB                5
+#define EVENT_USER_RESET                6
 // Now you can define other events from the user.
 
 #define EVENT_USER_INVALID              79
@@ -61,6 +63,8 @@ const int h_size = sizeof(struct header);
 #define OPCODE_FORWARD_ACK              0x31
 #define OPCODE_RETRIEVE                 0x40
 #define OPCODE_LOGOUT                   0x1F
+
+
 // Now you can define other opcodes in a similar fashion.
 
 int parse_the_event_from_the_input_string(char input_command[1024]){
@@ -71,6 +75,7 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
     char subscribehash[10] = {'s', 'u', 'b', 's', 'c', 'r', 'i', 'b', 'e', '#'};
     char unsubhash[12] = {'u', 'n', 's', 'u', 'b', 's', 'c', 'r', 'i', 'b', 'e', '#'};
     char retrievehash[9] = {'r', 'e', 't', 'r', 'i', 'e', 'v', 'e', '#'};
+    char resethash[6] ={'r', 'e', 's', 'e', 't', '#'};
 
     //compares first 5 char from send_buffer to 'login#'
         if(strncmp(input_command, loginhash, 6) == 0){
@@ -91,9 +96,16 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
         else if(strncmp(input_command, retrievehash, 9) == 0){
             return EVENT_USER_RETRIEVE;
         }
+        else if(strncmp(input_command, resethash, 6) == 0){
+            return EVENT_USER_RESET;
+        }
         else{
             return 0;
         }
+
+}
+
+int parse_the_event_from_the_received_message(){
 
 }
 
@@ -111,6 +123,10 @@ int main() {
     int maxfd;
     fd_set read_set;
     FD_ZERO(&read_set);
+
+    //by default the magic letters will be my own, until defined by the EVENT_LOGIN_SUCCESSFUL state
+    char MAGIC_1 = 'A';
+    char MAGIC_2 = 'M';
 
 
     // You just need one socket file descriptor. I made a mistake previously
@@ -138,7 +154,7 @@ int main() {
     memset(&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
     my_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    my_addr.sin_port = htons(rand() % (9999 + 1 - 5000) + 5000);//semi-random port number b/w 5000-9999 since 0-1023 are typically reserved
+    my_addr.sin_port = htons(rand() % (32000 + 1 - 5000) + 5000);//semi-random port number b/w 32000-9999 since 0-1023 are typically reserved
 
 
     // Bind "my_addr" to the socket for receiving messages from the server.
@@ -184,70 +200,175 @@ int main() {
 
             // You can also add a line to print the "event" for debugging.
 
-        if (event == EVENT_USER_LOGIN) {
+            if (event == EVENT_USER_LOGIN) {
                     if (state == STATE_OFFLINE) {
 
-                    // CAUTION: we do not need to parse the user ID and
-                    // and password string, assuming they are always in the
-                    // correct format. The server will parse it anyway.
+                        // CAUTION: we do not need to parse the user ID and
+                        // and password string, assuming they are always in the
+                        // correct format. The server will parse it anyway.
 
-                    char *id_password = user_input + 6; // skip the "login#"
-                    int m = strlen(id_password);
+                        char *id_password = user_input + 6; // skip the "login#"
+                        int m = strlen(id_password);
+
+                        ph_send->magic1 = MAGIC_1;
+                        ph_send->magic2 = MAGIC_2;
+                        ph_send->opcode = OPCODE_LOGIN;
+                        ph_send->payload_len = m;
+                        ph_send->token = 0;
+                        ph_send->msg_id = 0;
+
+                        memcpy(send_buffer + h_size, id_password, m);
+
+                        sendto(sockfd, send_buffer, h_size + m, 0, 
+                            (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+
+                        // Once the corresponding action finishes, transit to
+                        // the login_sent state
+                        state = STATE_LOGIN_SENT;
+
+                    } 
+                    else {
+
+                        // TODO: handle errors if the event happens in a state
+                        // that is not expected. Basically just print an error
+                        // message and doing nothing. Note that if a user types
+                        // something invalid, it does not need to trigger a 
+                        // session reset
+                        printf("Error. You are already online!\n");
+
+                    }
+
+            } 
+            else if (event == EVENT_USER_POST) {
+
+                // Note that this is similar to the login msg.
+                // Actually, these messages are carefully designed to 
+                // somewhat minimize the processing on the client side.
+                // If you look at the "subscribe", "unsubscribe", "post"
+                // and "retrieve", they are all similar, i.e., just fill
+                // the header and copy the user input after the "#" as
+                // the payload of the message, then just send the msg.
+                if (state == STATE_OFFLINE) {
+                    printf("Error. You are already logged out!\n");
+                }
+                else {
+                char *text = user_input + 5; // skip the "post#"
+                int m = strlen(text);
+
+                ph_send->magic1 = MAGIC_1;
+                ph_send->magic2 = MAGIC_2;
+                ph_send->opcode = OPCODE_POST;
+                ph_send->payload_len = m;
+                ph_send->token = token;
+                ph_send->msg_id = 0;
+
+                memcpy(send_buffer + h_size, text, m);
+
+                sendto(sockfd, send_buffer, h_size + m, 0, 
+                    (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+                }
+
+
+            } 
+            else if (event == EVENT_USER_LOGOUT) {
+
+                if (state == STATE_OFFLINE) {
+                    printf("Error. You are already logged out!\n");
+                }
+                else {
+                    int m = strlen(user_input);
 
                     ph_send->magic1 = MAGIC_1;
                     ph_send->magic2 = MAGIC_2;
-                    ph_send->opcode = OPCODE_LOGIN;
+                    ph_send->opcode = OPCODE_LOGOUT;
                     ph_send->payload_len = m;
                     ph_send->token = 0;
                     ph_send->msg_id = 0;
 
-                    memcpy(send_buffer + h_size, id_password, m);
+                    memcpy(send_buffer + h_size, user_input, m);
 
                     sendto(sockfd, send_buffer, h_size + m, 0, 
-                        (struct sockaddr *) &serv_addr, sizeof(serv_add));
+                        (struct sockaddr *) &serv_addr, sizeof(serv_addr));
 
                     // Once the corresponding action finishes, transit to
-                    // the login_sent state
-                        state = LOGIN_SENT;
-
-                } else {
-
-                    // TODO: handle errors if the event happens in a state
-                    // that is not expected. Basically just print an error
-                    // message and doing nothing. Note that if a user types
-                    // something invalid, it does not need to trigger a 
-                    // session reset
-                    printf("Error. You are already online");
-
+                    // the logout_sent state
+                    state = STATE_LOGOUT_SENT;
                 }
 
-            } else if (event == EVENT_USER_POST) {
+            } 
+            else if (event == EVENT_USER_RETRIEVE) {
 
-                    // Note that this is similar to the login msg.
-                    // Actually, these messages are carefully designed to 
-                    // somewhat minimize the processing on the client side.
-                    // If you look at the "subscribe", "unsubscribe", "post"
-                    // and "retrieve", they are all similar, i.e., just fill
-                    // the header and copy the user input after the "#" as
-                    // the payload of the message, then just send the msg.
-
-                    char *text = user_input + 5 // skip the "post#"
-                    int m = strlen(text);
+                if (state == STATE_OFFLINE) {
+                    printf("Error. Please log in!\n");
+                }
+                else {
+                    char *text = user_input + 9;//save the txt after # 
+                    int m = strlen(user_input);
 
                     ph_send->magic1 = MAGIC_1;
                     ph_send->magic2 = MAGIC_2;
-                    ph_send->opcode = OPCODE_POST;
+                    ph_send->opcode = OPCODE_RETRIEVE;
                     ph_send->payload_len = m;
-                    ph_send->token = token;
+                    ph_send->token = 0;
                     ph_send->msg_id = 0;
 
-                    memcpy(send_buffer + h_size, text, m);
+                    memcpy(send_buffer + h_size, user_input, m);
 
                     sendto(sockfd, send_buffer, h_size + m, 0, 
-                        (struct sockaddr *) &serv_addr, sizeof(serv_add));
+                        (struct sockaddr *) &serv_addr, sizeof(serv_addr));
 
+                }
 
-            } else if (event == EVENT_USER_RESET) {
+            } 
+            else if (event == EVENT_USER_SUB) {
+
+                if (state == STATE_OFFLINE) {
+                    printf("Error. Please log in!\n");
+                }
+                else {
+                    char *text = user_input + 10;//save the user to sub to after #
+                    int m = strlen(user_input);
+
+                    ph_send->magic1 = MAGIC_1;
+                    ph_send->magic2 = MAGIC_2;
+                    ph_send->opcode = OPCODE_SUBSCRIBE;
+                    ph_send->payload_len = m;
+                    ph_send->token = 0;
+                    ph_send->msg_id = 0;
+
+                    memcpy(send_buffer + h_size, user_input, m);
+
+                    sendto(sockfd, send_buffer, h_size + m, 0, 
+                        (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+                        
+                }
+
+            } 
+            else if (event == EVENT_USER_UNSUB) {
+
+                if (state == STATE_OFFLINE) {
+                    printf("Error. Please log in!\n");
+                }
+                else {
+                    char *text = user_input + 12;//save the user to unsub to after #
+                    int m = strlen(user_input);
+
+                    ph_send->magic1 = MAGIC_1;
+                    ph_send->magic2 = MAGIC_2;
+                    ph_send->opcode = OPCODE_UNSUBSCRIBE;
+                    ph_send->payload_len = m;
+                    ph_send->token = 0;
+                    ph_send->msg_id = 0;
+
+                    memcpy(send_buffer + h_size, user_input, m);
+
+                    sendto(sockfd, send_buffer, h_size + m, 0, 
+                        (struct sockaddr *) &serv_addr, sizeof(serv_addr));
+                        
+                }
+
+            } 
+            else if (event == EVENT_USER_RESET) {
 
                 // TODO: You may add another command like "reset#" so as to
                 // facilitate testing. In this case, a user just need to 
@@ -259,11 +380,7 @@ int main() {
                 // -ing anything.
 
 
-            } else if (event == .../* some other event */) {
-
-                // TODO: process other event
-
-            }
+            } 
 
         }
         if (FD_ISSET(sockfd, &read_set)) {
@@ -284,7 +401,8 @@ int main() {
                     // TODO: print a line of "login_ack#successful"
                     state = STATE_ONLINE;
 
-                } else {
+                } 
+                else {
 
                     // A spurious msg is received. Just reset the session.
                     // You can define a function "send_reset()" for 
@@ -293,20 +411,23 @@ int main() {
 
                     state = STATE_OFFLINE;
                 }
-            } else if (event == EVENT_NET_LOGIN_FAILED) {
+            } 
+            else if (event == EVENT_NET_LOGIN_FAILED) {
                     if (state == STATE_LOGIN_SENT) {
 
                     // TODO: print a line of "login_ack#failed"
                     state = STATE_OFFLINE;
 
-                } else {
+                } 
+                else {
 
                     send_reset(sockfd, send_buffer);
 
                     state = STATE_OFFLINE;
                 }
 
-            } else if (event == EVENT_NET_FORWARD) {
+            } 
+            else if (event == EVENT_NET_FORWARD) {
                     if (state == STATE_ONLINE) {
 
                     // Just extract the payload and print the text.
@@ -316,12 +437,14 @@ int main() {
 
                     // Note that no state change is needed.
 
-                } else {
+                } 
+                else {
 
 
                 }
 
-            } else if (event == ......) {
+            } 
+            else if (event == ......) {
 
                 // TODO: Process other events.
 
