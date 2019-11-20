@@ -34,17 +34,39 @@ const int h_size = sizeof(struct header);
 #define EVENT_NET_LOGIN                 80
 #define EVENT_NET_POST                  81
 // Now you can define other events from the network.
-......
+
 #define EVENT_NET_INVALID               255
 
 // These are the constants indicating the opcodes.
 // CAUTION: These opcodes must agree on both sides.
 #define OPCODE_RESET                    0x00
-#define OPCODE_MUST_LOGIN_FIRST_ERROR   0xF0
+//client >> server opcodes
 #define OPCODE_LOGIN                    0x10
-// Now you can define other opcodes in a similar fashion.
-......
+#define OPCODE_SUBSCRIBE                0x20
+#define OPCODE_UNSUBSCRIBE              0x21
+#define OPCODE_POST                     0x30
+#define OPCODE_FORWARD_ACK              0x31
+#define OPCODE_RETRIEVE                 0x40
+#define OPCODE_LOGOUT                   0x1F
+//server >> client opcodes
+#define OPCODE_MUST_LOGIN_FIRST_ERROR   0xF0
+#define OPCODE_SUCCESSFUL_LOGIN_ACK     0x80
+#define OPCODE_FAILED_LOGIN_ACK         0x81
+#define OPCODE_SUCCESSFUL_SUB_ACK       0x90
+#define OPCODE_FAILED_SUB_ACK           0x91
+#define OPCODE_SUCCESSFULL_UNSUB_ACK    0xA0
+#define OPCODE_FAILED_UNSUB_ACK         0xA1
+#define OPCODE_POST_ACK                 0xB0
+#define OPCODE_FORWARD                  0xB1
+#define OPCODE_RETRIEVE_ACK             0xC0
+#define OPCODE_END_RETRIEVE_ACK         0xC1
+#define OPCODE_LOGOUT_ACK               0x8F
 
+// Now you can define other opcodes in a similar fashion.
+
+void find_the_session_by_token(int token){
+
+}
 
 // This is a data structure that holds important information on a session.
 struct session {
@@ -138,7 +160,7 @@ int main() {
         // current state of the session referred.
 
 
-        int token = extract_token_from_the_received_binary_msg(...)
+        int token = ph_recv->token;
         // This is the current session we are working with.
         struct session *cs = find_the_session_by_token(...)
         int event = parse_the_event_from_the_datagram(...)
