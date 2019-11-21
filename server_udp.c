@@ -22,6 +22,8 @@ struct header {
 
 const int h_size = sizeof(struct header);
 
+#define MAGIC1  'A'
+#define MAGIC2  'M'
 // These are the constants indicating the states.
 // CAUTION: These states have nothing to do with the states on the client.
 #define STATE_OFFLINE          0
@@ -33,6 +35,11 @@ const int h_size = sizeof(struct header);
 // CAUTION: These events have nothing to do with the states on the client.
 #define EVENT_NET_LOGIN                 80
 #define EVENT_NET_POST                  81
+#define EVENT_NET_RETRIEVE              82
+#define EVENT_NET_LOGOUT                83
+#define EVENT_NET_SUB                   84
+#define EVENT_NET_UNSUB                 85
+#define EVENT_NET_FORWARD_ACK           86
 // Now you can define other events from the network.
 
 #define EVENT_NET_INVALID               255
@@ -64,14 +71,12 @@ const int h_size = sizeof(struct header);
 
 // Now you can define other opcodes in a similar fashion.
 
-void find_the_session_by_token(int token){
-
-}
-
 // This is a data structure that holds important information on a session.
 struct session {
 
     char client_id[32]; // Assume the client ID is less than 32 characters.
+    char client_pass[32];
+    int subs[16];
     struct sockaddr_in client_addr; // IP address and port of the client
                                     // for receiving messages from the 
                                     // server.
@@ -83,6 +88,30 @@ struct session {
     // TODO: You may need to add more information such as the subscription
     // list, password, etc.
 };
+
+int parse_the_event(char opcode){
+    if (opcode == OPCODE_LOGIN) {
+        return EVENT_NET_LOGIN;
+    }
+    else if (opcode == OPCODE_LOGOUT) {
+        return EVENT_NET_LOGOUT;
+    }
+    else if (opcode == OPCODE_POST) {
+        return EVENT_NET_POST;
+    }
+    else if (opcode == OPCODE_SUBSCRIBE) {
+        return EVENT_NET_SUB;
+    }
+    else if (opcode == OPCODE_UNSUBSCRIBE) {
+        return EVENT_NET_UNSUB;
+    }
+    else if (opcode == OPCODE_FORWARD_ACK) {
+        return EVENT_NET_FORWARD_ACK;
+    }
+    else if (opcode == OPCODE_RETRIEVE) {
+        return EVENT_NET_RETRIEVE;
+    }
+}
 
 // TODO: You may need to add more structures to hold global information
 // such as all registered clients, the list of all posted messages, etc.
@@ -106,6 +135,32 @@ int main() {
 
     // Now you need to load all users' information and fill this array.
     // Optionally, you can just hardcode each user.
+    struct session Noll;
+    struct session Joe;
+    struct session Mary;
+    struct session Don;
+
+    memset(&Noll, 0, sizeof(Noll));
+
+    strcpy(Joe.client_id, "joeking");
+    strcpy(Joe.client_pass, "lol");
+    memset(&Joe.subs, 0, sizeof(Joe.subs));
+    Joe.state = STATE_OFFLINE;
+
+    strcpy(Mary.client_id, "mary2");
+    strcpy(Mary.client_pass, "101");
+    memset(&Mary.subs, 0, sizeof(Mary.subs));
+    Mary.state = STATE_OFFLINE;
+
+    strcpy(Don.client_id, "don42");
+    strcpy(Don.client_pass, "password");
+    memset(&Don.subs, 0, sizeof(Don.subs));
+    Don.state = STATE_OFFLINE;
+
+    session_array[0] = Noll;    
+    session_array[1] = Joe;
+    session_array[2] = Mary;
+    session_array[3] = Don;
 
     // This current_session is a variable temporarily hold the session upon
     // an event.
@@ -159,16 +214,25 @@ int main() {
         // TODO: Figure out which event and process it according to the
         // current state of the session referred.
 
-
+        struct session *cs;
         int token = ph_recv->token;
         // This is the current session we are working with.
-        struct session *cs = find_the_session_by_token(...)
-        int event = parse_the_event_from_the_datagram(...)
+        for(int i = 1; i <= 16; i++){
+            struct session *temp = &session_array[i];
+            int temp_token = temp->token;
+            if(temp_token == token){
+                cs = temp;
+            }
+            else{
+                cs = &session_array[0]; //where Noll the NULL session is located
+            }
+        }
+        int event = parse_the_event(ph_recv->opcode);
 
         // Record the last time that this session is active.
-        current_session->last_time = time();
+        current_session->last_time = time(0);
 
-        if (event == EVENT_LOGIN) {
+        if (event == EVENT_NET_LOGIN) {
 
             // For a login event, the current_session should be NULL and
             // the token is 0.
@@ -194,22 +258,29 @@ int main() {
 
             // The server need to reply a msg anyway, and this reply msg
             // contains only the header
-            ph_send->magic1 = MAGIC_1;
-            ph_send->magic2 = MAGIC_2;
             ph_send->payload_len = 0;
             ph_send->msg_id = 0;
             
+            //check password
+            int login_success = 0;
 
-            int login_success = check_id_password(user_id, password);
+            for(int i = 1; i <= 16; i++){
+                struct session *temp = &session_array[i];
+                if(strcmp(password, temp->client_pass) == 0 && strcmp(user_id, temp->client_id) == 0){
+                    login_success = 1;
+                    cs = temp;
+                }
+
+            }
             if (login_success > 0) {
 
                 // This means the login is successful.
 
                 ph_send->opcode = OPCODE_SUCCESSFUL_LOGIN_ACK;
-                ph_send->token = generate_a_random_token();
+                ph_send->token = 1 + rand() %(1000);
 
-                cs = find_this_client_in_the_session_array();
-                cs->state = ONLINE;
+                
+                cs->state = STATE_ONLINE;
                 cs->token = ph_send->token;
                 cs->last_time = right_now();
                 cs->client_addr = cli_addr;
@@ -227,39 +298,42 @@ int main() {
 
 
         } else if (event == EVENT_NET_POST) {
-
-            // TODO: Check the state of the client that sends this post msg,
-            // i.e., check cs->state.
+            // TODO: Check the statetoken of the client that sends this post msg,
+            // i.e., check cs->statetoken.
 
             // Now we assume it is ONLINE, because I do not want to ident
             // the following code in another layer.
 
-            for each target session subscribed to this publisher {
+            for (int i = 1; i <= 16; i++) {
+                
+                if(cs->subs[i] == 1){
+                    struct session *target = &session_array[i];
+                    
+                    char *text = recv_buffer + h_size;
+                    char *payload = send_buffer + h_size;
 
-                char *text = recv_buffer + h_size;
-                char *payload = send_buffer + h_size;
+                    // This formatting the "<client_a>some_text" in the payload
+                    // of the forward msg, and hence, the client does not need
+                    // to format it, i.e., the client can just print it out.
+                    snprintf(payload, sizeof(send_buffer) - h_size, "<%s>%s",
+                        cs->client_id, text);
 
-                // This formatting the "<client_a>some_text" in the payload
-                // of the forward msg, and hence, the client does not need
-                // to format it, i.e., the client can just print it out.
-                snprintf(payload, sizeof(send_buffer) - h_size, "<%s>%s",
-                    cs->client_id, text);
+                    int m = strlen(payload);
 
-                int m = strlen(payload);
+                    // "target" is the session structure of the target client.
+                    target->state = STATE_MSG_FORWARD;
 
-                // "target" is the session structure of the target client.
-                target->state = STATE_MSG_FORWARD;
+                    ph_send->magic1 = MAGIC1;
+                    ph_send->magic2 = MAGIC2;
+                    ph_send->opcode = OPCODE_FORWARD;
+                    ph_send->payload_len = m;
+                    ph_send->msg_id = 0; // Note that I didn't use msg_id here.
 
-                ph_send->magic1 = MAGIC_1;
-                ph_send->magic2 = MAGIC_2;
-                ph_send->opcode = OPCODE_FORWARD;
-                ph_send->payload_len = m;
-                ph_send->msg_id = 0; // Note that I didn't use msg_id here.
-
-                sendto(sockfd, send_buffer, h_size, 0, 
-                    (struct sockaddr *) &target->client_addr, 
-                    sizeof(target->client_addr));
-
+                    sendto(sockfd, send_buffer, h_size, 0, 
+                        (struct sockaddr *) &target->client_addr, 
+                        sizeof(target->client_addr));
+                }
+                
 
             }
 

@@ -21,6 +21,9 @@ struct header {
 
 const int h_size = sizeof(struct header);
 
+#define MAGIC1  'A'
+#define MAGIC2  'M'
+
 // These are the constants indicating the states.
 #define STATE_OFFLINE           0
 #define STATE_LOGIN_SENT        1
@@ -138,8 +141,6 @@ int main() {
     FD_ZERO(&read_set);
 
     //by default the magic letters will be my own, until defined by the EVENT_LOGIN_SUCCESSFUL state
-    char MAGIC_1 = 'A';
-    char MAGIC_2 = 'M';
 
 
     // You just need one socket file descriptor. I made a mistake previously
@@ -167,7 +168,7 @@ int main() {
     memset(&my_addr, 0, sizeof(my_addr));
     my_addr.sin_family = AF_INET;
     my_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    my_addr.sin_port = htons(rand() % (32000 + 1 - 5000) + 5000);//semi-random port number b/w 32000-9999 since 0-1023 are typically reserved
+    my_addr.sin_port = htons(rand() % (30000 + 1 - 5000) + 5000);//semi-random port number b/w 30000-9999 since 0-1023 are typically reserved
 
 
     // Bind "my_addr" to the socket for receiving messages from the server.
@@ -223,8 +224,8 @@ int main() {
                         char *id_password = user_input + 6; // skip the "login#"
                         int m = strlen(id_password);
 
-                        ph_send->magic1 = MAGIC_1;
-                        ph_send->magic2 = MAGIC_2;
+                        ph_send->magic1 = MAGIC1;
+                        ph_send->magic2 = MAGIC2;
                         ph_send->opcode = OPCODE_LOGIN;
                         ph_send->payload_len = m;
                         ph_send->token = 0;
@@ -407,12 +408,12 @@ int main() {
             event = parse_the_event_from_the_received_message(...)
 
             if (event == EVENT_NET_LOGIN_SUCCESSFUL) {
-                    if (state == STATE_LOGIN_SENT) {
+                if (state == STATE_LOGIN_SENT) {
 
-                    token = ph_recv->token;
+                token = ph_recv->token;
 
-                    // TODO: print a line of "login_ack#successful"
-                    state = STATE_ONLINE;
+                // TODO: print a line of "login_ack#successful"
+                state = STATE_ONLINE;
 
                 } 
                 else {
