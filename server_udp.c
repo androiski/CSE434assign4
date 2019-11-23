@@ -22,6 +22,12 @@ struct header {
 
 const int h_size = sizeof(struct header);
 
+struct message {
+
+    char *msg;
+
+};
+
 #define MAGIC1  'A'
 #define MAGIC2  'M'
 // These are the constants indicating the states.
@@ -40,7 +46,7 @@ const int h_size = sizeof(struct header);
 #define EVENT_NET_SUB                   84
 #define EVENT_NET_UNSUB                 85
 #define EVENT_NET_FORWARD_ACK           86
-// Now you can define other events from the network.
+// Now you can define other events from the network/
 
 #define EVENT_NET_INVALID               255
 
@@ -61,7 +67,7 @@ const int h_size = sizeof(struct header);
 #define OPCODE_FAILED_LOGIN_ACK         0x81
 #define OPCODE_SUCCESSFUL_SUB_ACK       0x90
 #define OPCODE_FAILED_SUB_ACK           0x91
-#define OPCODE_SUCCESSFULL_UNSUB_ACK    0xA0
+#define OPCODE_SUCCESSFUL_UNSUB_ACK    0xA0
 #define OPCODE_FAILED_UNSUB_ACK         0xA1
 #define OPCODE_POST_ACK                 0xB0
 #define OPCODE_FORWARD                  0xB1
@@ -132,6 +138,9 @@ int main() {
     // Assume we are dealing with at most 16 clients, and this array of
     // the session structure is essentially our user database.
     struct session session_array[16];
+
+    struct message message_array[255];
+    int total_msg = 0;
 
     // Now you need to load all users' information and fill this array.
     // Optionally, you can just hardcode each user.
@@ -297,28 +306,31 @@ int main() {
 
 
 
-        } else if (event == EVENT_NET_POST) {
+        } 
+        else if (event == EVENT_NET_POST) {
             // TODO: Check the statetoken of the client that sends this post msg,
             // i.e., check cs->statetoken.
 
             // Now we assume it is ONLINE, because I do not want to ident
             // the following code in another layer.
 
+            char *text = recv_buffer + h_size;
+            char *payload = send_buffer + h_size;
+
+            // This formatting the "<client_a>some_text" in the payload
+            // of the forward msg, and hence, the client does not need
+            // to format it, i.e., the client can just print it out.
+            snprintf(payload, sizeof(send_buffer) - h_size, "<%s>%s",
+                cs->client_id, text);
+
+            int m = strlen(payload);
+
             for (int i = 1; i <= 16; i++) {
                 
                 if(cs->subs[i] == 1){
                     struct session *target = &session_array[i];
                     
-                    char *text = recv_buffer + h_size;
-                    char *payload = send_buffer + h_size;
 
-                    // This formatting the "<client_a>some_text" in the payload
-                    // of the forward msg, and hence, the client does not need
-                    // to format it, i.e., the client can just print it out.
-                    snprintf(payload, sizeof(send_buffer) - h_size, "<%s>%s",
-                        cs->client_id, text);
-
-                    int m = strlen(payload);
 
                     // "target" is the session structure of the target client.
                     target->state = STATE_MSG_FORWARD;
@@ -327,7 +339,7 @@ int main() {
                     ph_send->magic2 = MAGIC2;
                     ph_send->opcode = OPCODE_FORWARD;
                     ph_send->payload_len = m;
-                    ph_send->msg_id = 0; // Note that I didn't use msg_id here.
+                    ph_send->msg_id = total_msg; // Note that I didn't use msg_id here.
 
                     sendto(sockfd, send_buffer, h_size, 0, 
                         (struct sockaddr *) &target->client_addr, 
@@ -338,17 +350,128 @@ int main() {
             }
 
             // TODO: send back the post ack to this publisher.
+            ph_send->opcode = OPCODE_POST_ACK;
+            cs->last_time = right_now();
+            sendto(sockfd, send_buffer, h_size, 0, 
+                (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
             // TODO: put the posted text line into a global list.
+            message_array[total_msg].msg = payload;
+            total_msg += 1;
+
+        } 
+        else if (event == EVENT_NET_RETRIEVE) {
+
+            int *event_ct = recv_buffer + h_size;
+
+            for(int i = 0; i <= event_ct; i++){
+
+                char *payload = message_array[i].msg;
+                int m = strlen(payload);
+
+                ph_send->magic1 = MAGIC1;
+                ph_send->magic2 = MAGIC2;
+                ph_send->opcode = OPCODE_RETRIEVE_ACK;
+                ph_send->payload_len = m;
+                ph_send->msg_id = i;
+
+                memcpy(send_buffer + h_size, payload, m);
+
+                sendto(sockfd, send_buffer, h_size, 0, 
+                (struct sockaddr *) &cli_addr, sizeof(cli_addr));
+
+            }
+
+            ph_send->magic1 = MAGIC1;
+            ph_send->magic2 = MAGIC2;
+            ph_send->opcode = OPCODE_END_RETRIEVE_ACK;
+            ph_send->payload_len = 0;
+
+            sendto(sockfd, send_buffer, h_size, 0, 
+                (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
 
-        } else if (event == ...) {
+        } 
+        else if (event == EVENT_NET_SUB) {
 
-            // TODO: process other events
+            char *sub_to_id= recv_buffer + h_size;
+            int m = strlen(sub_to_id);
+            int id_loc = 0;
+
+            for(int i = 1; i <= 16; i++){
+                struct session *temp = &session_array[i];
+                if(strcmp(sub_to_id, temp->client_id) == 0){
+                    cs->subs[i] = 1;
+                    id_loc = i;
+                }
+            }
+
+            if(id_loc){
+                ph_send->opcode = OPCODE_SUCCESSFUL_SUB_ACK;
+            }
+            else{
+                ph_send->opcode = OPCODE_FAILED_SUB_ACK;
+            }
+
+            ph_send->magic1 = MAGIC1;
+            ph_send->magic2 = MAGIC2;
+
+            memcpy(send_buffer + h_size, sub_to_id, m);
+
+            ph_send->payload_len = m;
+
+            sendto(sockfd, send_buffer, h_size, 0, 
+                (struct sockaddr *) &cli_addr, sizeof(cli_addr));
+
+
+        } 
+        else if (event == EVENT_NET_UNSUB) {
+
+            char *unsub_to_id= recv_buffer + h_size;
+            int m = strlen(unsub_to_id);
+            int id_loc = 0;
+
+            for(int i = 1; i <= 16; i++){
+                struct session *temp = &session_array[i];
+                if(strcmp(unsub_to_id, temp->client_id) == 0){
+                    cs->subs[i] = 0;
+                    id_loc = 1;
+                }
+            }
+
+            if(id_loc){
+                ph_send->opcode = OPCODE_SUCCESSFUL_UNSUB_ACK; 
+
+            }
+            else{
+                ph_send->opcode = OPCODE_FAILED_UNSUB_ACK;
+            }
+
+            ph_send->magic1 = MAGIC1;
+            ph_send->magic2 = MAGIC2;
+            memcpy(send_buffer + h_size, unsub_to_id, m);
+            ph_send->payload_len = m;
+
+            sendto(sockfd, send_buffer, h_size, 0, 
+                (struct sockaddr *) &cli_addr, sizeof(cli_addr));
+
+        } 
+        else if (event == EVENT_NET_LOGOUT) {
+
+            cs->state = STATE_OFFLINE;
+
+            ph_send->magic1 = MAGIC1;
+            ph_send->magic2 = MAGIC2;
+            ph_send->opcode = OPCODE_LOGOUT_ACK;
+            ph_send->payload_len = 0;
+
+            sendto(sockfd, send_buffer, h_size, 0, 
+                (struct sockaddr *) &cli_addr, sizeof(cli_addr));
+
 
         }
 
-        time_t current_time = time();
+        time_t current_time = time(0);
 
         // Now you may check the time of clients, i.e., scan all sessions. 
         // For each session, if the current time has passed 5 minutes plus 

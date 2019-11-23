@@ -40,6 +40,7 @@ const int h_size = sizeof(struct header);
 #define EVENT_USER_SUB                  4
 #define EVENT_USER_UNSUB                5
 #define EVENT_USER_RESET                6
+#define EVENT_FORWARD_ACK               7
 // Now you can define other events from the user.
 
 #define EVENT_USER_INVALID              79
@@ -51,7 +52,10 @@ const int h_size = sizeof(struct header);
 #define EVENT_NET_LOGOUT_SUCCESSFUL     82
 #define EVENT_NET_RET_ACK               83
 #define EVENT_NET_RET_ACK_END           84
-#define EVENT_NET_SUBBED_MSG            85
+#define EVENT_NET_FORWARD               85
+#define EVENT_NET_FAILED                86
+#define EVENT_NET_SUB_SUCCESSFUL        87
+#define EVENT_NET_UNSUB_SUCCESSFUL      88
 // Now you can define other events from the network.
 
 #define EVENT_NET_INVALID               255
@@ -68,11 +72,11 @@ const int h_size = sizeof(struct header);
 #define OPCODE_LOGOUT                   0x1F
 //server >> client opcodes
 #define OPCODE_MUST_LOGIN_FIRST_ERROR   0xF0
-#define OPCODE_SUCCESSFUL_LOGIN_ACK     0x80
+#define OPCODE_SUCCESSFUL_LOGIN_ACK     0x80 
 #define OPCODE_FAILED_LOGIN_ACK         0x81
 #define OPCODE_SUCCESSFUL_SUB_ACK       0x90
 #define OPCODE_FAILED_SUB_ACK           0x91
-#define OPCODE_SUCCESSFULL_UNSUB_ACK    0xA0
+#define OPCODE_SUCCESSFUL_UNSUB_ACK     0xA0
 #define OPCODE_FAILED_UNSUB_ACK         0xA1
 #define OPCODE_POST_ACK                 0xB0
 #define OPCODE_FORWARD                  0xB1
@@ -121,8 +125,43 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
 
 }
 
-int parse_the_event_from_the_received_message(){
-
+int parse_the_event_from_the_received_message(char opcode){
+    if(opcode == OPCODE_SUCCESSFUL_LOGIN_ACK){
+        return EVENT_NET_LOGIN_SUCCESSFUL;
+    }
+    else if(opcode == OPCODE_LOGOUT_ACK){
+        return EVENT_NET_LOGOUT_SUCCESSFUL;
+    }
+    else if(opcode == OPCODE_FAILED_LOGIN_ACK){
+        return EVENT_NET_FAILED;
+    }
+    else if(opcode == OPCODE_SUCCESSFUL_SUB_ACK){
+        return EVENT_NET_SUB_SUCCESSFUL;
+    }
+    else if(opcode == OPCODE_FAILED_SUB_ACK){
+        return EVENT_NET_FAILED;
+    }
+    else if(opcode == OPCODE_SUCCESSFUL_UNSUB_ACK){
+        return EVENT_NET_UNSUB_SUCCESSFUL;
+    }
+    else if(opcode == OPCODE_FAILED_UNSUB_ACK){
+        return EVENT_NET_FAILED;
+    }
+    else if(opcode == OPCODE_POST_ACK){
+        return EVENT_NET_POST_ACK;
+    }
+    else if(opcode == OPCODE_FORWARD){
+        return EVENT_NET_FORWARD;
+    }
+    else if(opcode == OPCODE_RETRIEVE_ACK){
+        return EVENT_NET_RET_ACK;
+    }
+    else if(opcode == OPCODE_END_RETRIEVE_ACK){
+        return EVENT_NET_RET_ACK_END;
+    }
+    else{
+        return -1;
+    }
 }
 
 
@@ -269,8 +308,8 @@ int main() {
                 char *text = user_input + 5; // skip the "post#"
                 int m = strlen(text);
 
-                ph_send->magic1 = MAGIC_1;
-                ph_send->magic2 = MAGIC_2;
+                ph_send->magic1 = MAGIC1;
+                ph_send->magic2 = MAGIC2;
                 ph_send->opcode = OPCODE_POST;
                 ph_send->payload_len = m;
                 ph_send->token = token;
@@ -292,11 +331,11 @@ int main() {
                 else {
                     int m = strlen(user_input);
 
-                    ph_send->magic1 = MAGIC_1;
-                    ph_send->magic2 = MAGIC_2;
+                    ph_send->magic1 = MAGIC1;
+                    ph_send->magic2 = MAGIC2;
                     ph_send->opcode = OPCODE_LOGOUT;
                     ph_send->payload_len = m;
-                    ph_send->token = 0;
+                    ph_send->token = token;
                     ph_send->msg_id = 0;
 
                     memcpy(send_buffer + h_size, user_input, m);
@@ -319,11 +358,11 @@ int main() {
                     char *text = user_input + 9;//save the txt after # 
                     int m = strlen(user_input);
 
-                    ph_send->magic1 = MAGIC_1;
-                    ph_send->magic2 = MAGIC_2;
+                    ph_send->magic1 = MAGIC1;
+                    ph_send->magic2 = MAGIC2;
                     ph_send->opcode = OPCODE_RETRIEVE;
                     ph_send->payload_len = m;
-                    ph_send->token = 0;
+                    ph_send->token = token;
                     ph_send->msg_id = 0;
 
                     memcpy(send_buffer + h_size, user_input, m);
@@ -343,11 +382,11 @@ int main() {
                     char *text = user_input + 10;//save the user to sub to after #
                     int m = strlen(user_input);
 
-                    ph_send->magic1 = MAGIC_1;
-                    ph_send->magic2 = MAGIC_2;
+                    ph_send->magic1 = MAGIC1;
+                    ph_send->magic2 = MAGIC2;
                     ph_send->opcode = OPCODE_SUBSCRIBE;
                     ph_send->payload_len = m;
-                    ph_send->token = 0;
+                    ph_send->token = token;
                     ph_send->msg_id = 0;
 
                     memcpy(send_buffer + h_size, user_input, m);
@@ -367,11 +406,11 @@ int main() {
                     char *text = user_input + 12;//save the user to unsub to after #
                     int m = strlen(user_input);
 
-                    ph_send->magic1 = MAGIC_1;
-                    ph_send->magic2 = MAGIC_2;
+                    ph_send->magic1 = MAGIC1;
+                    ph_send->magic2 = MAGIC2;
                     ph_send->opcode = OPCODE_UNSUBSCRIBE;
                     ph_send->payload_len = m;
-                    ph_send->token = 0;
+                    ph_send->token = token;
                     ph_send->msg_id = 0;
 
                     memcpy(send_buffer + h_size, user_input, m);
@@ -405,14 +444,14 @@ int main() {
 
             ret = recv(sockfd, recv_buffer, sizeof(recv_buffer), 0);
 
-            event = parse_the_event_from_the_received_message(...)
+            event = parse_the_event_from_the_received_message(ph_recv->opcode);
 
             if (event == EVENT_NET_LOGIN_SUCCESSFUL) {
                 if (state == STATE_LOGIN_SENT) {
 
                 token = ph_recv->token;
 
-                // TODO: print a line of "login_ack#successful"
+                printf("LOGIN SUCESSFUL!\n");
                 state = STATE_ONLINE;
 
                 } 
@@ -426,10 +465,10 @@ int main() {
                     state = STATE_OFFLINE;
                 }
             } 
-            else if (event == EVENT_NET_LOGIN_FAILED) {
-                    if (state == STATE_LOGIN_SENT) {
+            else if (event == EVENT_NET_FAILED) {
+                if (state == STATE_LOGIN_SENT) {
 
-                    // TODO: print a line of "login_ack#failed"
+                    printf("LOGIN FAILED!\n");
                     state = STATE_OFFLINE;
 
                 } 
@@ -440,9 +479,17 @@ int main() {
                     state = STATE_OFFLINE;
                 }
 
+                if (ph_recv->opcode == OPCODE_FAILED_SUB_ACK){
+                    printf("SUBSCRIPTION FAILED!\n");
+                }
+                if (ph_recv->opcode == OPCODE_FAILED_UNSUB_ACK){
+                    printf("UNSUBSCRIPTION FAILED!\n");
+                }
+
+
             } 
             else if (event == EVENT_NET_FORWARD) {
-                    if (state == STATE_ONLINE) {
+                if (state == STATE_ONLINE) {
 
                     // Just extract the payload and print the text.
                     char *text = recv_buffer + h_size;
@@ -452,22 +499,64 @@ int main() {
                     // Note that no state change is needed.
 
                 } 
-                else {
-
-
-                }
+                
 
             } 
-            else if (event == ......) {
+            else if (event == EVENT_NET_LOGOUT_SUCCESSFUL) {
 
-                // TODO: Process other events.
+                if (state == STATE_LOGOUT_SENT) {
+
+                printf("LOGOUT SUCESSFUL!\n");
+                state = STATE_OFFLINE;
+
+                } 
+                else {
+
+                    // A spurious msg is received. Just reset the session.
+                    // You can define a function "send_reset()" for 
+                    // convenience because it might be used in many places.
+                    send_reset(sockfd, send_buffer);
+
+                    state = STATE_OFFLINE;
+                }
 
 
             }
+            else if (event == EVENT_NET_POST_ACK) {
+
+                printf("POST SUCESSFUL!\n");
+
+            }
+            else if (event == EVENT_NET_RET_ACK) {
+
+                char *text = recv_buffer + h_size;
+
+                printf("%s\n", text);
 
 
+            }
+            else if (event == EVENT_NET_RET_ACK_END) {
+
+                printf("DONE RETRIEVING!\n");
 
 
+            }
+            else if (event == EVENT_NET_SUB_SUCCESSFUL) {
+
+                char *text = recv_buffer + h_size;
+
+                printf("SUCESSFULLY SUBBED TO: %s\n", text);
+
+
+            }
+            else if (event == EVENT_NET_UNSUB_SUCCESSFUL) {
+
+                char *text = recv_buffer + h_size;
+
+                printf("SUCESSFULLY UNSUBBED TO: %s\n", text);
+
+
+            }
 
         }
 
