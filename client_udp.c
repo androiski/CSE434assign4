@@ -324,8 +324,13 @@ int main() {
                     printf("Error. You are already logged out!\n");
                 }
                 else {
-                char *text = user_input + 5; // skip the "post#"
-                int m = strlen(text);
+                char *posted_msg = user_input + 5; // skip the "post#"
+            
+                char *delimiter = strchr(posted_msg, '\n');
+                *delimiter = 0;
+                int m = strlen(posted_msg);
+
+                printf("posted this: %s\n", posted_msg);
 
                 ph_send->magic1 = MAGIC1;
                 ph_send->magic2 = MAGIC2;
@@ -334,7 +339,7 @@ int main() {
                 ph_send->token = token;
                 ph_send->msg_id = 0;
 
-                memcpy(send_buffer + h_size, text, m);
+                memcpy(send_buffer + h_size, posted_msg, m);
 
                 sendto(sockfd, send_buffer, h_size + m, 0, 
                     (struct sockaddr *) &serv_addr, sizeof(serv_addr));
@@ -374,8 +379,11 @@ int main() {
                     printf("Error. Please log in!\n");
                 }
                 else {
-                    char *text = user_input + 9;//save the txt after # 
+                    char *ret_amt = user_input + 9;//save the txt after # 
+                    char *delimiter = strchr(ret_amt, '\n');
+                    *delimiter = 0;
                     int m = strlen(user_input);
+                    printf("retrieving the %s latest posts\n", ret_amt);
 
                     ph_send->magic1 = MAGIC1;
                     ph_send->magic2 = MAGIC2;
@@ -384,7 +392,7 @@ int main() {
                     ph_send->token = token;
                     ph_send->msg_id = 0;
 
-                    memcpy(send_buffer + h_size, user_input, m);
+                    memcpy(send_buffer + h_size, ret_amt, m);
 
                     sendto(sockfd, send_buffer, h_size + m, 0, 
                         (struct sockaddr *) &serv_addr, sizeof(serv_addr));
@@ -398,7 +406,10 @@ int main() {
                     printf("Error. Please log in!\n");
                 }
                 else {
-                    char *text = user_input + 10;//save the user to sub to after #
+                    char *sub_to = user_input + 10;//save the user to sub to after #
+                    char *delimiter = strchr(sub_to, '\n');
+                    *delimiter = 0;
+                    printf("subscribing to %s\n", sub_to);
                     int m = strlen(user_input);
 
                     ph_send->magic1 = MAGIC1;
@@ -408,7 +419,7 @@ int main() {
                     ph_send->token = token;
                     ph_send->msg_id = 0;
 
-                    memcpy(send_buffer + h_size, user_input, m);
+                    memcpy(send_buffer + h_size, sub_to, m);
 
                     sendto(sockfd, send_buffer, h_size + m, 0, 
                         (struct sockaddr *) &serv_addr, sizeof(serv_addr));
@@ -422,7 +433,10 @@ int main() {
                     printf("Error. Please log in!\n");
                 }
                 else {
-                    char *text = user_input + 12;//save the user to unsub to after #
+                    char *unsub_to = user_input + 12;//save the user to unsub to after #
+                    char *delimiter = strchr(unsub_to, '\n');
+                    *delimiter = 0;
+                    printf("subscribing to %s\n", unsub_to);
                     int m = strlen(user_input);
 
                     ph_send->magic1 = MAGIC1;
@@ -432,7 +446,7 @@ int main() {
                     ph_send->token = token;
                     ph_send->msg_id = 0;
 
-                    memcpy(send_buffer + h_size, user_input, m);
+                    memcpy(send_buffer + h_size, unsub_to, m);
 
                     sendto(sockfd, send_buffer, h_size + m, 0, 
                         (struct sockaddr *) &serv_addr, sizeof(serv_addr));

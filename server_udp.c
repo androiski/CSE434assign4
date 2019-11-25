@@ -324,12 +324,15 @@ int main() {
 
             char *text = recv_buffer + h_size;
             char *payload = send_buffer + h_size;
+            
 
             // This formatting the "<client_a>some_text" in the payload
             // of the forward msg, and hence, the client does not need
             // to format it, i.e., the client can just print it out.
             snprintf(payload, sizeof(send_buffer) - h_size, "<%s>%s",
                 cs->client_id, text);
+            
+            printf("%s\n", payload);
 
             int m = strlen(payload);
 
@@ -337,8 +340,6 @@ int main() {
                 
                 if(cs->subs[i] == 1){
                     struct session *target = &session_array[i];
-                    
-
 
                     // "target" is the session structure of the target client.
                     target->state = STATE_MSG_FORWARD;
@@ -349,7 +350,7 @@ int main() {
                     ph_send->payload_len = m;
                     ph_send->msg_id = total_msg; // Note that I didn't use msg_id here.
 
-                    sendto(sockfd, send_buffer, h_size, 0, 
+                    sendto(sockfd, send_buffer, h_size + m, 0, 
                         (struct sockaddr *) &target->client_addr, 
                         sizeof(target->client_addr));
                 }
@@ -364,18 +365,23 @@ int main() {
                 (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
             // TODO: put the posted text line into a global list.
-            message_array[total_msg].msg = payload;
             total_msg += 1;
+            message_array[total_msg].msg = payload;
+            printf("stored %s in index %d\n", message_array[total_msg].msg, total_msg);
 
         } 
         else if (event == EVENT_NET_RETRIEVE) {
 
             char *event_ct = recv_buffer + h_size;
+            printf("%s\n", event_ct);
 
-            for(int i = 0; i <= *event_ct; i++){
+            for(int i = total_msg; i > total_msg - *event_ct; i--){
+                printf("retrieving %u\n", i);
 
                 char *payload = message_array[i].msg;
+                printf("sending %s to the user\n", payload);
                 int m = strlen(payload);
+                printf("sending %s to the user\n", payload);
 
                 ph_send->magic1 = MAGIC1;
                 ph_send->magic2 = MAGIC2;
@@ -385,7 +391,7 @@ int main() {
 
                 memcpy(send_buffer + h_size, payload, m);
 
-                sendto(sockfd, send_buffer, h_size, 0, 
+                sendto(sockfd, send_buffer, h_size + m, 0, 
                 (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
             }
@@ -427,7 +433,7 @@ int main() {
             ph_send->magic1 = MAGIC1;
             ph_send->magic2 = MAGIC2;
 
-            memcpy(send_buffer + h_size, sub_to_id, m);
+            memcpy(send_buffer + h_size + m, sub_to_id, m);
 
             ph_send->payload_len = m;
 
@@ -465,7 +471,7 @@ int main() {
             memcpy(send_buffer + h_size, unsub_to_id, m);
             ph_send->payload_len = m;
 
-            sendto(sockfd, send_buffer, h_size, 0, 
+            sendto(sockfd, send_buffer, h_size + m, 0, 
                 (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
         } 
