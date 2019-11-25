@@ -10,10 +10,10 @@
 
 struct header {
 
-    char magic1;
-    char magic2;
-    char opcode;
-    char payload_len;
+    uint8_t magic1;
+    uint8_t magic2;
+    uint8_t opcode;
+    uint8_t payload_len;
 
     uint32_t token;
     uint32_t msg_id;
@@ -99,24 +99,31 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
 
     //compares first 5 char from send_buffer to 'login#'
         if(strncmp(input_command, loginhash, 6) == 0){
+            printf("loging in ...\n");
             return EVENT_USER_LOGIN;
         }
         else if(strncmp(input_command, logouthash, 7) == 0){
+            printf("loging out ...\n");
             return EVENT_USER_LOGOUT;
         }
         else if(strncmp(input_command, posthash, 5) == 0){
+            printf("posting ...\n");
             return EVENT_USER_POST;
         }
         else if(strncmp(input_command, subscribehash, 10) == 0){
+            printf("subscribing ...\n");
             return EVENT_USER_SUB;
         }
         else if(strncmp(input_command, unsubhash, 12) == 0){
+            printf("unsubscribing ...\n");
             return EVENT_USER_UNSUB;
         }
         else if(strncmp(input_command, retrievehash, 9) == 0){
+            printf("retrieving ...\n");
             return EVENT_USER_RETRIEVE;
         }
         else if(strncmp(input_command, resethash, 6) == 0){
+            printf("reset ...\n");
             return EVENT_USER_RESET;
         }
         else{
@@ -125,41 +132,53 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
 
 }
 
-int parse_the_event_from_the_received_message(char opcode){
+int parse_the_event_from_the_received_message(uint8_t opcode){
     if(opcode == OPCODE_SUCCESSFUL_LOGIN_ACK){
+        printf("login ack\n");
         return EVENT_NET_LOGIN_SUCCESSFUL;
     }
     else if(opcode == OPCODE_LOGOUT_ACK){
+        printf("logout ack\n");
         return EVENT_NET_LOGOUT_SUCCESSFUL;
     }
     else if(opcode == OPCODE_FAILED_LOGIN_ACK){
+        printf("failed login ack\n");
         return EVENT_NET_FAILED;
     }
     else if(opcode == OPCODE_SUCCESSFUL_SUB_ACK){
+        printf("sub ack\n");
         return EVENT_NET_SUB_SUCCESSFUL;
     }
     else if(opcode == OPCODE_FAILED_SUB_ACK){
+        printf("failed sub ack\n");
         return EVENT_NET_FAILED;
     }
     else if(opcode == OPCODE_SUCCESSFUL_UNSUB_ACK){
+        printf("unsub ack\n");
         return EVENT_NET_UNSUB_SUCCESSFUL;
     }
     else if(opcode == OPCODE_FAILED_UNSUB_ACK){
+        printf("failed unsub ack\n");
         return EVENT_NET_FAILED;
     }
     else if(opcode == OPCODE_POST_ACK){
+        printf("post ack\n");
         return EVENT_NET_POST_ACK;
     }
     else if(opcode == OPCODE_FORWARD){
+        printf("forward\n");
         return EVENT_NET_FORWARD;
     }
     else if(opcode == OPCODE_RETRIEVE_ACK){
+        printf("ret ack\n");
         return EVENT_NET_RET_ACK;
     }
     else if(opcode == OPCODE_END_RETRIEVE_ACK){
+        printf("ret ack end\n");
         return EVENT_NET_RET_ACK_END;
     }
     else{
+        printf("wtf\n");
         return -1;
     }
 }
@@ -254,7 +273,7 @@ int main() {
             // You can also add a line to print the "event" for debugging.
 
             if (event == EVENT_USER_LOGIN) {
-                    if (state == STATE_OFFLINE) {
+                    if (state != STATE_ONLINE) {
 
                         // CAUTION: we do not need to parse the user ID and
                         // and password string, assuming they are always in the
@@ -443,7 +462,6 @@ int main() {
             // current state
 
             ret = recv(sockfd, recv_buffer, sizeof(recv_buffer), 0);
-
             event = parse_the_event_from_the_received_message(ph_recv->opcode);
 
             if (event == EVENT_NET_LOGIN_SUCCESSFUL) {
@@ -451,16 +469,17 @@ int main() {
 
                 token = ph_recv->token;
 
-                printf("LOGIN SUCESSFUL!\n");
+                printf("LOGIN SUCESSFUL!\nYOU ARE NOW ONLINE\n");
                 state = STATE_ONLINE;
 
                 } 
                 else {
+                    printf("uhhh\n");
 
                     // A spurious msg is received. Just reset the session.
                     // You can define a function "send_reset()" for 
                     // convenience because it might be used in many places.
-                    send_reset(sockfd, send_buffer);
+                    //send_reset(sockfd, send_buffer);
 
                     state = STATE_OFFLINE;
                 }
@@ -474,7 +493,7 @@ int main() {
                 } 
                 else {
 
-                    send_reset(sockfd, send_buffer);
+                   // send_reset(sockfd, send_buffer);
 
                     state = STATE_OFFLINE;
                 }
@@ -515,7 +534,7 @@ int main() {
                     // A spurious msg is received. Just reset the session.
                     // You can define a function "send_reset()" for 
                     // convenience because it might be used in many places.
-                    send_reset(sockfd, send_buffer);
+                    //send_reset(sockfd, send_buffer);
 
                     state = STATE_OFFLINE;
                 }

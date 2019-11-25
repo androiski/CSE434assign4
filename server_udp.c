@@ -11,10 +11,10 @@
 
 struct header {
 
-    char magic1;
-    char magic2;
-    char opcode;
-    char payload_len;
+    uint8_t magic1;
+    uint8_t magic2;
+    uint8_t opcode;
+    uint8_t payload_len;
 
     uint32_t token;
     uint32_t msg_id;
@@ -95,26 +95,33 @@ struct session {
     // list, password, etc.
 };
 
-int parse_the_event(char opcode){
+int parse_the_event(uint8_t opcode){
     if (opcode == OPCODE_LOGIN) {
+        printf("login\n");
         return EVENT_NET_LOGIN;
     }
     else if (opcode == OPCODE_LOGOUT) {
+        printf("logout\n");
         return EVENT_NET_LOGOUT;
     }
     else if (opcode == OPCODE_POST) {
+        printf("post\n");
         return EVENT_NET_POST;
     }
     else if (opcode == OPCODE_SUBSCRIBE) {
+        printf("sub\n");
         return EVENT_NET_SUB;
     }
     else if (opcode == OPCODE_UNSUBSCRIBE) {
+        printf("unsub\n");
         return EVENT_NET_UNSUB;
     }
     else if (opcode == OPCODE_FORWARD_ACK) {
+        printf("for\n");
         return EVENT_NET_FORWARD_ACK;
     }
     else if (opcode == OPCODE_RETRIEVE) {
+        printf("ret\n");
         return EVENT_NET_RETRIEVE;
     }
 }
@@ -148,7 +155,7 @@ int main() {
     struct session Joe;
     struct session Mary;
     struct session Don;
-
+    printf("Making the fake sessions\n");
     memset(&Noll, 0, sizeof(Noll));
 
     strcpy(Joe.client_id, "joeking");
@@ -217,8 +224,6 @@ int main() {
         }
 
 
-
-
         // Now we know there is an event from the network
         // TODO: Figure out which event and process it according to the
         // current state of the session referred.
@@ -236,24 +241,28 @@ int main() {
                 cs = &session_array[0]; //where Noll the NULL session is located
             }
         }
+
         int event = parse_the_event(ph_recv->opcode);
+        
 
         // Record the last time that this session is active.
-        current_session->last_time = time(0);
+        //current_session->last_time = time(0);
 
         if (event == EVENT_NET_LOGIN) {
 
             // For a login event, the current_session should be NULL and
             // the token is 0.
-
+            printf("user login attempt\n");
             char *id_password = recv_buffer + h_size;
 
             char *delimiter = strchr(id_password, '&');
             char *password = delimiter + 1;
+            printf("%s\n", password);
             *delimiter = 0; // Add a null terminator
             // Note that this null terminator can break the user ID
             // and the password without allocating other buffers.
             char *user_id = id_password;
+            printf("%s\n", user_id);
 
             delimiter = strchr(password, '\n');
             *delimiter = 0; // Add a null terminator
@@ -261,8 +270,6 @@ int main() {
             // and since it is always typed by a user, there must be a
             // trailing new line. We just write a null terminator on this
             // place to terminate the password string.
-
-
 
 
             // The server need to reply a msg anyway, and this reply msg
@@ -276,6 +283,7 @@ int main() {
             for(int i = 1; i <= 16; i++){
                 struct session *temp = &session_array[i];
                 if(strcmp(password, temp->client_pass) == 0 && strcmp(user_id, temp->client_id) == 0){
+                    printf("found user in database entry: %d\n", i);
                     login_success = 1;
                     cs = temp;
                 }
@@ -288,14 +296,14 @@ int main() {
                 ph_send->opcode = OPCODE_SUCCESSFUL_LOGIN_ACK;
                 ph_send->token = 1 + rand() %(1000);
 
-                
+                printf("sending login ack\n");
                 cs->state = STATE_ONLINE;
                 cs->token = ph_send->token;
-                cs->last_time = right_now();
+                cs->last_time = time(0);
                 cs->client_addr = cli_addr;
 
             } else {
-
+                printf("sending failed login ack\n");
                 ph_send->opcode = OPCODE_FAILED_LOGIN_ACK;
                 ph_send->token = 0;
 
@@ -351,7 +359,7 @@ int main() {
 
             // TODO: send back the post ack to this publisher.
             ph_send->opcode = OPCODE_POST_ACK;
-            cs->last_time = right_now();
+            cs->last_time = time(0);
             sendto(sockfd, send_buffer, h_size, 0, 
                 (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
@@ -362,9 +370,9 @@ int main() {
         } 
         else if (event == EVENT_NET_RETRIEVE) {
 
-            int *event_ct = recv_buffer + h_size;
+            char *event_ct = recv_buffer + h_size;
 
-            for(int i = 0; i <= event_ct; i++){
+            for(int i = 0; i <= *event_ct; i++){
 
                 char *payload = message_array[i].msg;
                 int m = strlen(payload);
@@ -381,6 +389,8 @@ int main() {
                 (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
             }
+
+            cs->last_time = time(0);
 
             ph_send->magic1 = MAGIC1;
             ph_send->magic2 = MAGIC2;
@@ -411,8 +421,9 @@ int main() {
             }
             else{
                 ph_send->opcode = OPCODE_FAILED_SUB_ACK;
-            }
+            }   
 
+            cs->last_time = time(0);
             ph_send->magic1 = MAGIC1;
             ph_send->magic2 = MAGIC2;
 
@@ -447,6 +458,8 @@ int main() {
                 ph_send->opcode = OPCODE_FAILED_UNSUB_ACK;
             }
 
+
+            cs->last_time = time(0);
             ph_send->magic1 = MAGIC1;
             ph_send->magic2 = MAGIC2;
             memcpy(send_buffer + h_size, unsub_to_id, m);
@@ -477,6 +490,14 @@ int main() {
         // For each session, if the current time has passed 5 minutes plus 
         // the last time of the session, the session expires.
         // TODO: check session liveliness
+        for(int i = 1; i <= 16; i++){
+            struct session *temp = &session_array[i];
+            int idle_time  = current_time - temp->last_time;
+            if(idle_time >= 300 && temp->state == STATE_ONLINE){
+                temp->state = STATE_OFFLINE;
+                printf("Sesson %d has expired %u\n", i, idle_time);
+            }
+        }
 
 
     } // This is the end of the while loop
