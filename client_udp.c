@@ -99,86 +99,86 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
 
     //compares first 5 char from send_buffer to 'login#'
         if(strncmp(input_command, loginhash, 6) == 0){
-            printf("loging in ...\n");
+            //printf("loging in ...\n");
             return EVENT_USER_LOGIN;
         }
         else if(strncmp(input_command, logouthash, 7) == 0){
-            printf("loging out ...\n");
+           // printf("loging out ...\n");
             return EVENT_USER_LOGOUT;
         }
         else if(strncmp(input_command, posthash, 5) == 0){
-            printf("posting ...\n");
+           // printf("posting ...\n");
             return EVENT_USER_POST;
         }
         else if(strncmp(input_command, subscribehash, 10) == 0){
-            printf("subscribing ...\n");
+            //printf("subscribing ...\n");
             return EVENT_USER_SUB;
         }
         else if(strncmp(input_command, unsubhash, 12) == 0){
-            printf("unsubscribing ...\n");
+            //printf("unsubscribing ...\n");
             return EVENT_USER_UNSUB;
         }
         else if(strncmp(input_command, retrievehash, 9) == 0){
-            printf("retrieving ...\n");
+            //printf("retrieving ...\n");
             return EVENT_USER_RETRIEVE;
         }
         else if(strncmp(input_command, resethash, 6) == 0){
-            printf("reset ...\n");
+            //printf("reset ...\n");
             return EVENT_USER_RESET;
         }
         else{
-            return -1;
+            return EVENT_USER_RESET;
         }
 
 }
 
 int parse_the_event_from_the_received_message(uint8_t opcode){
     if(opcode == OPCODE_SUCCESSFUL_LOGIN_ACK){
-        printf("login ack\n");
+        //printf("login ack\n");
         return EVENT_NET_LOGIN_SUCCESSFUL;
     }
     else if(opcode == OPCODE_LOGOUT_ACK){
-        printf("logout ack\n");
+       //printf("logout ack\n");
         return EVENT_NET_LOGOUT_SUCCESSFUL;
     }
     else if(opcode == OPCODE_FAILED_LOGIN_ACK){
-        printf("failed login ack\n");
+        //printf("failed login ack\n");
         return EVENT_NET_FAILED;
     }
     else if(opcode == OPCODE_SUCCESSFUL_SUB_ACK){
-        printf("sub ack\n");
+       // printf("sub ack\n");
         return EVENT_NET_SUB_SUCCESSFUL;
     }
     else if(opcode == OPCODE_FAILED_SUB_ACK){
-        printf("failed sub ack\n");
+        //printf("failed sub ack\n");
         return EVENT_NET_FAILED;
     }
     else if(opcode == OPCODE_SUCCESSFUL_UNSUB_ACK){
-        printf("unsub ack\n");
+      //  printf("unsub ack\n");
         return EVENT_NET_UNSUB_SUCCESSFUL;
     }
     else if(opcode == OPCODE_FAILED_UNSUB_ACK){
-        printf("failed unsub ack\n");
+       // printf("failed unsub ack\n");
         return EVENT_NET_FAILED;
     }
     else if(opcode == OPCODE_POST_ACK){
-        printf("post ack\n");
+       // printf("post ack\n");
         return EVENT_NET_POST_ACK;
     }
     else if(opcode == OPCODE_FORWARD){
-        printf("forward\n");
+        //printf("forward\n");
         return EVENT_NET_FORWARD;
     }
     else if(opcode == OPCODE_RETRIEVE_ACK){
-        printf("ret ack\n");
+       // printf("ret ack\n");
         return EVENT_NET_RET_ACK;
     }
     else if(opcode == OPCODE_END_RETRIEVE_ACK){
-        printf("ret ack end\n");
+        //printf("ret ack end\n");
         return EVENT_NET_RET_ACK_END;
     }
     else{
-        printf("wtf\n");
+       // printf("wtf\n");
         return -1;
     }
 }
@@ -249,6 +249,8 @@ int main() {
     struct header *ph_recv = (struct header *)recv_buffer;
 
     while (1) {
+        memset(&recv_buffer, 0, sizeof(recv_buffer));
+        memset(&send_buffer, 0, sizeof(send_buffer));
     
         // Use select to wait on keyboard input or socket receiving.
         FD_SET(fileno(stdin), &read_set);
@@ -306,7 +308,7 @@ int main() {
                         // message and doing nothing. Note that if a user types
                         // something invalid, it does not need to trigger a 
                         // session reset
-                        printf("Error. You are already online!\n");
+                        printf("ERROR. You are already online!\n");
 
                     }
 
@@ -321,7 +323,7 @@ int main() {
                 // the header and copy the user input after the "#" as
                 // the payload of the message, then just send the msg.
                 if (state == STATE_OFFLINE) {
-                    printf("Error. You are already logged out!\n");
+                    printf("ERROR. You are already logged out!\n");
                 }
                 else {
                 char *posted_msg = user_input + 5; // skip the "post#"
@@ -330,7 +332,7 @@ int main() {
                 *delimiter = 0;
                 int m = strlen(posted_msg);
 
-                printf("posted this: %s\n", posted_msg);
+                //printf("posted this: %s\n", posted_msg);
 
                 ph_send->magic1 = MAGIC1;
                 ph_send->magic2 = MAGIC2;
@@ -350,7 +352,7 @@ int main() {
             else if (event == EVENT_USER_LOGOUT) {
 
                 if (state == STATE_OFFLINE) {
-                    printf("Error. You are already logged out!\n");
+                    printf("ERROR. You are already logged out!\n");
                 }
                 else {
                     int m = strlen(user_input);
@@ -376,7 +378,7 @@ int main() {
             else if (event == EVENT_USER_RETRIEVE) {
 
                 if (state == STATE_OFFLINE) {
-                    printf("Error. Please log in!\n");
+                    printf("ERROR. Please log in!\n");
                 }
                 else {
                     char *ret_amt = user_input + 9;//save the txt after # 
@@ -403,7 +405,7 @@ int main() {
             else if (event == EVENT_USER_SUB) {
 
                 if (state == STATE_OFFLINE) {
-                    printf("Error. Please log in!\n");
+                    printf("ERROR. Please log in!\n");
                 }
                 else {
                     char *sub_to = user_input + 10;//save the user to sub to after #
@@ -430,7 +432,7 @@ int main() {
             else if (event == EVENT_USER_UNSUB) {
 
                 if (state == STATE_OFFLINE) {
-                    printf("Error. Please log in!\n");
+                    printf("ERROR. Please log in!\n");
                 }
                 else {
                     char *unsub_to = user_input + 12;//save the user to unsub to after #
@@ -459,11 +461,23 @@ int main() {
                 // TODO: You may add another command like "reset#" so as to
                 // facilitate testing. In this case, a user just need to 
                 // type this line to generate a reset message.
+                
+                ph_send->magic1 = MAGIC1;
+                ph_send->magic2 = MAGIC2;
+                ph_send->opcode = OPCODE_RESET;
+                ph_send->payload_len = 0;
+                ph_send->token = token;
+                ph_send->msg_id = 0;
 
+                    sendto(sockfd, send_buffer, h_size, 0, 
+                        (struct sockaddr *) &serv_addr, sizeof(serv_addr));
                 // You can add more command as you like to help debugging.
                 // For example, I can add a command "state#" to instruct the
                 // client program to print the current state without chang
                 // -ing anything.
+                printf("BAD/RESET COMMAND: CLIENT HAS BEEN RESET\n");
+                state = STATE_OFFLINE;
+                token = 0;
 
 
             } 
@@ -482,8 +496,9 @@ int main() {
                 if (state == STATE_LOGIN_SENT) {
 
                 token = ph_recv->token;
+                printf("Your token is %d\n", token);
 
-                printf("LOGIN SUCESSFUL!\nYOU ARE NOW ONLINE\n");
+                printf("LOGIN SUCESSFUL! YOU ARE NOW ONLINE\n");
                 state = STATE_ONLINE;
 
                 } 
@@ -578,7 +593,7 @@ int main() {
 
                 char *text = recv_buffer + h_size;
 
-                printf("SUCESSFULLY SUBBED TO: %s\n", text);
+                printf("SUCESSFULLY SUBBED!\n");
 
 
             }
@@ -586,7 +601,7 @@ int main() {
 
                 char *text = recv_buffer + h_size;
 
-                printf("SUCESSFULLY UNSUBBED TO: %s\n", text);
+                printf("SUCESSFULLY UNSUBBED!\n");
 
 
             }

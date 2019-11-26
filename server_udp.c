@@ -24,7 +24,7 @@ const int h_size = sizeof(struct header);
 
 struct message {
 
-    char *msg;
+    char msg[255];
 
 };
 
@@ -34,7 +34,6 @@ struct message {
 // CAUTION: These states have nothing to do with the states on the client.
 #define STATE_OFFLINE          0
 #define STATE_ONLINE           1
-#define STATE_MSG_FORWARD      2
 // Now you can define other states in a similar fashion.
 
 // These are the events
@@ -67,7 +66,7 @@ struct message {
 #define OPCODE_FAILED_LOGIN_ACK         0x81
 #define OPCODE_SUCCESSFUL_SUB_ACK       0x90
 #define OPCODE_FAILED_SUB_ACK           0x91
-#define OPCODE_SUCCESSFUL_UNSUB_ACK    0xA0
+#define OPCODE_SUCCESSFUL_UNSUB_ACK     0xA0
 #define OPCODE_FAILED_UNSUB_ACK         0xA1
 #define OPCODE_POST_ACK                 0xB0
 #define OPCODE_FORWARD                  0xB1
@@ -97,32 +96,36 @@ struct session {
 
 int parse_the_event(uint8_t opcode){
     if (opcode == OPCODE_LOGIN) {
-        printf("login\n");
+        //printf("login\n");
         return EVENT_NET_LOGIN;
     }
     else if (opcode == OPCODE_LOGOUT) {
-        printf("logout\n");
+        //printf("logout\n");
         return EVENT_NET_LOGOUT;
     }
     else if (opcode == OPCODE_POST) {
-        printf("post\n");
+        //printf("post\n");
         return EVENT_NET_POST;
     }
     else if (opcode == OPCODE_SUBSCRIBE) {
-        printf("sub\n");
+        //printf("sub\n");
         return EVENT_NET_SUB;
     }
     else if (opcode == OPCODE_UNSUBSCRIBE) {
-        printf("unsub\n");
+        //printf("unsub\n");
         return EVENT_NET_UNSUB;
     }
     else if (opcode == OPCODE_FORWARD_ACK) {
-        printf("for\n");
+        //printf("for\n");
         return EVENT_NET_FORWARD_ACK;
     }
     else if (opcode == OPCODE_RETRIEVE) {
-        printf("ret\n");
+       // printf("ret\n");
         return EVENT_NET_RETRIEVE;
+    }
+    else{
+        //printf("bad command from client or reset\n");
+        return EVENT_NET_INVALID;
     }
 }
 
@@ -155,7 +158,7 @@ int main() {
     struct session Joe;
     struct session Mary;
     struct session Don;
-    printf("Making the fake sessions\n");
+    //printf("Making the fake sessions\n");
     memset(&Noll, 0, sizeof(Noll));
 
     strcpy(Joe.client_id, "joeking");
@@ -209,7 +212,8 @@ int main() {
         // Note that the program will still block on recvfrom()
         // You may call select() only on this socket file descriptor with
         // a timeout, or set a timeout using the socket options.
-
+        memset(&recv_buffer, 0, sizeof(recv_buffer));
+        memset(&send_buffer, 0, sizeof(send_buffer));
         len = sizeof(cli_addr);
         recv_len = recvfrom(sockfd, // socket file descriptor
                  recv_buffer,       // receive buffer
@@ -231,22 +235,20 @@ int main() {
         struct session *cs;
         int token = ph_recv->token;
         // This is the current session we are working with.
+        printf("user with token %d sent a command: ", token);
         for(int i = 1; i <= 16; i++){
             struct session *temp = &session_array[i];
             int temp_token = temp->token;
             if(temp_token == token){
-                cs = temp;
+                current_session = temp;
             }
             else{
                 cs = &session_array[0]; //where Noll the NULL session is located
             }
         }
-
-        int event = parse_the_event(ph_recv->opcode);
+        cs = current_session;
         
-
-        // Record the last time that this session is active.
-        //current_session->last_time = time(0);
+        int event = parse_the_event(ph_recv->opcode);
 
         if (event == EVENT_NET_LOGIN) {
 
@@ -257,12 +259,12 @@ int main() {
 
             char *delimiter = strchr(id_password, '&');
             char *password = delimiter + 1;
-            printf("%s\n", password);
+            printf("password %s", password);
             *delimiter = 0; // Add a null terminator
             // Note that this null terminator can break the user ID
             // and the password without allocating other buffers.
             char *user_id = id_password;
-            printf("%s\n", user_id);
+            printf("user_id %s\n", user_id);
 
             delimiter = strchr(password, '\n');
             *delimiter = 0; // Add a null terminator
@@ -279,12 +281,13 @@ int main() {
             
             //check password
             int login_success = 0;
-
+            int j;
             for(int i = 1; i <= 16; i++){
                 struct session *temp = &session_array[i];
                 if(strcmp(password, temp->client_pass) == 0 && strcmp(user_id, temp->client_id) == 0){
                     printf("found user in database entry: %d\n", i);
                     login_success = 1;
+                    j = i;
                     cs = temp;
                 }
 
@@ -292,18 +295,18 @@ int main() {
             if (login_success > 0) {
 
                 // This means the login is successful.
-
+                cs = &session_array[j];
                 ph_send->opcode = OPCODE_SUCCESSFUL_LOGIN_ACK;
                 ph_send->token = 1 + rand() %(1000);
 
-                printf("sending login ack\n");
+                printf("sending login ack with token as %d ...\n", ph_send->token);
                 cs->state = STATE_ONLINE;
                 cs->token = ph_send->token;
                 cs->last_time = time(0);
                 cs->client_addr = cli_addr;
 
             } else {
-                printf("sending failed login ack\n");
+                printf("sending failed login ack ...\n");
                 ph_send->opcode = OPCODE_FAILED_LOGIN_ACK;
                 ph_send->token = 0;
 
@@ -329,20 +332,21 @@ int main() {
             // This formatting the "<client_a>some_text" in the payload
             // of the forward msg, and hence, the client does not need
             // to format it, i.e., the client can just print it out.
+            //printf("%s\n", text);
             snprintf(payload, sizeof(send_buffer) - h_size, "<%s>%s",
                 cs->client_id, text);
             
-            printf("%s\n", payload);
+            //printf("%s\n", payload);
 
             int m = strlen(payload);
 
             for (int i = 1; i <= 16; i++) {
-                
+
                 if(cs->subs[i] == 1){
                     struct session *target = &session_array[i];
+                    printf("target to forward is %s ...\n", target->client_id);
 
                     // "target" is the session structure of the target client.
-                    target->state = STATE_MSG_FORWARD;
 
                     ph_send->magic1 = MAGIC1;
                     ph_send->magic2 = MAGIC2;
@@ -355,6 +359,7 @@ int main() {
                         sizeof(target->client_addr));
                 }
                 
+                
 
             }
 
@@ -366,22 +371,23 @@ int main() {
 
             // TODO: put the posted text line into a global list.
             total_msg += 1;
-            message_array[total_msg].msg = payload;
-            printf("stored %s in index %d\n", message_array[total_msg].msg, total_msg);
+            strcpy(message_array[total_msg].msg, payload);
+            printf("stored %s in index %d ...\n", message_array[total_msg].msg, total_msg);
 
         } 
         else if (event == EVENT_NET_RETRIEVE) {
 
             char *event_ct = recv_buffer + h_size;
-            printf("%s\n", event_ct);
+            int ret_ct = atoi(event_ct);
+            //printf("%d\n", ret_ct);
+            int cd = total_msg - ret_ct;
 
-            for(int i = total_msg; i > total_msg - *event_ct; i--){
-                printf("retrieving %u\n", i);
+            for(int i = total_msg; i > cd ; i--){
+                printf("ack Retrieving %u ...\n", i);
 
                 char *payload = message_array[i].msg;
-                printf("sending %s to the user\n", payload);
                 int m = strlen(payload);
-                printf("sending %s to the user\n", payload);
+                //printf("sending %s to the user\n", payload);
 
                 ph_send->magic1 = MAGIC1;
                 ph_send->magic2 = MAGIC2;
@@ -401,6 +407,7 @@ int main() {
             ph_send->magic1 = MAGIC1;
             ph_send->magic2 = MAGIC2;
             ph_send->opcode = OPCODE_END_RETRIEVE_ACK;
+            printf("ack Done retrieving!\n");
             ph_send->payload_len = 0;
 
             sendto(sockfd, send_buffer, h_size, 0, 
@@ -412,16 +419,29 @@ int main() {
 
             char *sub_to_id= recv_buffer + h_size;
             int m = strlen(sub_to_id);
+            printf("ack Attempting to subscribe %s to %s ...\n", cs->client_id, sub_to_id);
             int id_loc = 0;
+            int sub_at = 0;
+
+            for(int i = 1; i <= 16; i++){
+                struct session *temp = &session_array[i];
+                if(strcmp(cs->client_id, temp->client_id) == 0){
+                    sub_at = i;
+                }
+            }
 
             for(int i = 1; i <= 16; i++){
                 struct session *temp = &session_array[i];
                 if(strcmp(sub_to_id, temp->client_id) == 0){
-                    cs->subs[i] = 1;
-                    id_loc = i;
-                }
+                        if(temp->subs[sub_at] == 0){
+                            //printf("changed sub_table of %s for %s at index %d\n",  temp->client_id, cs->client_id, i);
+                            temp->subs[sub_at] = 1;
+                            id_loc = i;
+                        }
+                    }
             }
-
+            
+            
             if(id_loc){
                 ph_send->opcode = OPCODE_SUCCESSFUL_SUB_ACK;
             }
@@ -446,14 +466,26 @@ int main() {
 
             char *unsub_to_id= recv_buffer + h_size;
             int m = strlen(unsub_to_id);
+            printf("ack Attempting to unsubscribe %s to %s ...\n", cs->client_id, unsub_to_id);
             int id_loc = 0;
+            int unsub_at = 0;
+
+            for(int i = 1; i <= 16; i++){
+                struct session *temp = &session_array[i];
+                if(strcmp(cs->client_id, temp->client_id) == 0){
+                    unsub_at = i;
+                }
+            }
 
             for(int i = 1; i <= 16; i++){
                 struct session *temp = &session_array[i];
                 if(strcmp(unsub_to_id, temp->client_id) == 0){
-                    cs->subs[i] = 0;
-                    id_loc = 1;
-                }
+                        if(temp->subs[unsub_at] == 1){
+                            //printf("changed sub_table of %s for %s at index %d\n",  temp->client_id, cs->client_id, i);
+                            temp->subs[unsub_at] = 0;
+                            id_loc = i;
+                        }
+                    }
             }
 
             if(id_loc){
@@ -478,6 +510,7 @@ int main() {
         else if (event == EVENT_NET_LOGOUT) {
 
             cs->state = STATE_OFFLINE;
+            printf("ack Logged out the user %s\n", cs->client_id);
 
             ph_send->magic1 = MAGIC1;
             ph_send->magic2 = MAGIC2;
@@ -487,6 +520,11 @@ int main() {
             sendto(sockfd, send_buffer, h_size, 0, 
                 (struct sockaddr *) &cli_addr, sizeof(cli_addr));
 
+
+        }
+        else if (event == EVENT_NET_INVALID) {
+            printf("ERROR. Bad/reset command from client: %s\n RESETING ...", cs->client_id);
+            cs->state = STATE_OFFLINE;
 
         }
 
