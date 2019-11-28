@@ -1,3 +1,8 @@
+/*
+Made by Andrew Murza for CSE434 Networks with Duo Lu
+#1212940532
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -97,7 +102,6 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
     char retrievehash[9] = {'r', 'e', 't', 'r', 'i', 'e', 'v', 'e', '#'};
     char resethash[6] ={'r', 'e', 's', 'e', 't', '#'};
 
-    //compares first 5 char from send_buffer to 'login#'
         if(strncmp(input_command, loginhash, 6) == 0){
             //printf("loging in ...\n");
             return EVENT_USER_LOGIN;
