@@ -90,8 +90,8 @@ const int h_size = sizeof(struct header);
 #define OPCODE_LOGOUT_ACK               0x8F
 
 
-// Now you can define other opcodes in a similar fashion.
 
+/* these opcodes/events contain printf statements for visualization/debugging */
 int parse_the_event_from_the_input_string(char input_command[1024]){
 
     char loginhash[6] = {'l', 'o', 'g', 'i', 'n', '#'};
@@ -135,6 +135,7 @@ int parse_the_event_from_the_input_string(char input_command[1024]){
         }
 
 }
+/* these opcodes/events contain printf statements for visualization/debugging */
 
 int parse_the_event_from_the_received_message(uint8_t opcode){
     if(opcode == OPCODE_SUCCESSFUL_LOGIN_ACK){
@@ -439,7 +440,8 @@ int main() {
                     printf("ERROR. Please log in!\n");
                 }
                 else {
-                    char *unsub_to = user_input + 12;//save the user to unsub to after #
+                    /*  save the user to unsub to after # character  */
+                    char *unsub_to = user_input + 12;
                     char *delimiter = strchr(unsub_to, '\n');
                     *delimiter = 0;
                     printf("subscribing to %s\n", unsub_to);
@@ -475,10 +477,7 @@ int main() {
 
                     sendto(sockfd, send_buffer, h_size, 0, 
                         (struct sockaddr *) &serv_addr, sizeof(serv_addr));
-                // You can add more command as you like to help debugging.
-                // For example, I can add a command "state#" to instruct the
-                // client program to print the current state without chang
-                // -ing anything.
+                
                 printf("BAD/RESET COMMAND: CLIENT HAS BEEN RESET\n");
                 state = STATE_OFFLINE;
                 token = 0;
@@ -489,9 +488,9 @@ int main() {
         }
         if (FD_ISSET(sockfd, &read_set)) {
 
-            // Now we know there is an event from the network
-            // TODO: Figure out which event and process it according to the
-            // current state
+            /*  Now we know there is an event from the network
+                Figure out which event and process it according to the
+                current state    */
 
             ret = recv(sockfd, recv_buffer, sizeof(recv_buffer), 0);
             event = parse_the_event_from_the_received_message(ph_recv->opcode);
@@ -509,10 +508,10 @@ int main() {
                 else {
                     printf("uhhh\n");
 
-                    // A spurious msg is received. Just reset the session.
-                    // You can define a function "send_reset()" for 
-                    // convenience because it might be used in many places.
-                    //send_reset(sockfd, send_buffer);
+                    /*  A spurious msg is received. Just reset the session.
+                        You can define a function "send_reset()" for 
+                        // convenience because it might be used in many places.
+                        send_reset(sockfd, send_buffer);  */
 
                     state = STATE_OFFLINE;
                 }
@@ -526,7 +525,7 @@ int main() {
                 } 
                 else {
 
-                   // send_reset(sockfd, send_buffer);
+                   /*   send_reset(sockfd, send_buffer);    */
 
                     state = STATE_OFFLINE;
                 }
@@ -548,7 +547,7 @@ int main() {
 
                     printf("%s\n", text);
 
-                    // Note that no state change is needed.
+                    /*  Note that no state change is needed.    */
 
                 } 
                 
@@ -564,10 +563,10 @@ int main() {
                 } 
                 else {
 
-                    // A spurious msg is received. Just reset the session.
-                    // You can define a function "send_reset()" for 
-                    // convenience because it might be used in many places.
-                    //send_reset(sockfd, send_buffer);
+                    /*  a spurious msg is received. Just reset the session.
+                        You can define a function "send_reset()" for 
+                        convenience because it might be used in many places.
+                        send_reset(sockfd, send_buffer);    */
 
                     state = STATE_OFFLINE;
                 }
@@ -612,12 +611,12 @@ int main() {
 
         }
 
-        // Now we finished processing the pending event. Just go back to the
-        // beginning of the loop and waiting for another event. 
-        // Note that you can set a timeout for the select() function 
-        // to allow it to return regularly and check timeout related events.
+        /*  Now we finished processing the pending event. Just go back to the
+            beginning of the loop and waiting for another event. 
+            Note that you can set a timeout for the select() function 
+            to allow it to return regularly and check timeout related events.   */
 
-    } // This is the end of the while loop
+    } /*    This is the end of the while loop   */
 
-} // This is the end of main()
+} /*    This is the end of main()   */
 
